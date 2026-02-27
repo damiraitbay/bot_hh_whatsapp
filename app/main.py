@@ -3,7 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from twilio.request_validator import RequestValidator
 from twilio.twiml.messaging_response import MessagingResponse
@@ -57,19 +57,22 @@ async def health() -> JSONResponse:
 @app.post("/webhooks/twilio/whatsapp")
 async def twilio_whatsapp_webhook(
     request: Request,
-    Body: str = Form(default=""),
-    From: str = Form(default=""),
 ) -> PlainTextResponse:
-    form_data = {k: v for k, v in {"Body": Body, "From": From}.items() if isinstance(v, str)}
+    submitted_form = await request.form()
+    form_data = {k: str(v) for k, v in submitted_form.items()}
+
     if not _validate_twilio_request(request, form_data):
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
-    answer = responder.answer(Body)
+    body = form_data.get("Body", "")
+    sender = form_data.get("From", "")
+
+    answer = responder.answer(body)
 
     response = MessagingResponse()
     response.message(answer)
 
-    logger.info("Incoming WhatsApp message from %s: %s", From, Body)
+    logger.info("Incoming WhatsApp message from %s: %s", sender, body)
     logger.info("Outgoing reply: %s", answer)
 
     return PlainTextResponse(str(response), media_type="application/xml")
