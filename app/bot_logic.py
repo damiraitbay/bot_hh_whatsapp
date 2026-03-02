@@ -2,7 +2,6 @@
 
 import re
 from dataclasses import dataclass
-from typing import Iterable
 
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -23,9 +22,7 @@ class VacancyInfo:
 @dataclass
 class InterviewQuestion:
     text: str
-    positive_keywords: tuple[str, ...] = ()
-    negative_keywords: tuple[str, ...] = ()
-    min_answer_len: int = 20
+    expected_yes: bool = True
 
 
 @dataclass
@@ -51,32 +48,16 @@ INTERVIEW_START_KEYWORDS = (
 )
 
 INTERVIEW_QUESTIONS: tuple[InterviewQuestion, ...] = (
-    InterviewQuestion("Почему вы хотите работать у нас?", ("компания", "продукт", "миссия", "команда"), ("деньги",)),
-    InterviewQuestion("Почему вы выбрали именно эту профессию/отрасль?", ("интерес", "развит", "технолог", "опыт"), ()),
-    InterviewQuestion("Почему мы должны выбрать именно вас?", ("результат", "опыт", "ответствен", "проект"), ()),
-    InterviewQuestion("Что вас мотивирует на работе?", ("рост", "команда", "результат", "задач"), ("только деньги",)),
-    InterviewQuestion("Где вы видите себя через 3–5 лет?", ("развит", "эксперт", "лид", "рост"), ("не знаю",)),
-    InterviewQuestion("Почему вы ушли с предыдущего места работы?", ("рост", "новый", "задач", "проект"), ("конфликт", "ненавижу", "плохой начальник")),
-    InterviewQuestion("Какие ваши сильные стороны?", ("ответствен", "коммуникац", "аналит", "инициатив"), ()),
-    InterviewQuestion("Какие ваши слабые стороны?", ("работаю над", "улучшаю", "исправляю"), ("нет слабых",)),
-    InterviewQuestion("Есть ли у вас опыт работы с Python/Java/JavaScript?", ("python", "java", "javascript", "js"), ()),
-    InterviewQuestion("Расскажите о вашем опыте работы с командой.", ("команда", "коммуникац", "совмест", "планирован"), ("не люблю команду",)),
-    InterviewQuestion("Умеете ли вы работать в условиях многозадачности?", ("приоритет", "план", "дедлайн"), ("не умею",)),
-    InterviewQuestion("Опишите проект, которым вы гордитесь.", ("проект", "результат", "метрик", "влияние"), ()),
-    InterviewQuestion("Как вы справляетесь со стрессом?", ("план", "приоритет", "спокойно", "перерыв"), ("не справляюсь",)),
-    InterviewQuestion("Как вы решаете конфликтные ситуации?", ("диалог", "обсуж", "факт", "компромисс"), ("кричу", "игнорирую")),
-    InterviewQuestion("Как вы организуете своё время?", ("план", "календар", "приоритет", "задач"), ("хаотично",)),
-    InterviewQuestion("Какие качества помогают вам достигать результатов?", ("дисциплин", "ответствен", "систем", "инициатив"), ()),
-    InterviewQuestion("Расскажите о случае, когда вы ошиблись и как исправили ситуацию.", ("ошиб", "исправ", "вывод", "урок"), ("никогда не ошибаюсь",)),
-    InterviewQuestion("Что вы знаете о нашей компании?", ("компания", "продукт", "рынок", "клиент"), ("ничего",)),
-    InterviewQuestion("Какие тренды в отрасли вы считаете важными?", ("автоматизац", "ai", "безопас", "облако"), ()),
-    InterviewQuestion("Почему вам интересен именно наш продукт/услуга?", ("продукт", "польза", "клиент", "ценност"), ("без разницы",)),
-    InterviewQuestion("Какие курсы или тренинги вы проходили за последний год?", ("курс", "обуч", "сертификат", "прошел"), ("ничего",)),
-    InterviewQuestion("Какие навыки вы планируете развивать?", ("развит", "план", "навык", "изуч"), ("не планирую",)),
-    InterviewQuestion("Как вы обучаетесь новым технологиям или инструментам?", ("документац", "практик", "курс", "проект"), ()),
-    InterviewQuestion("Каковы ваши ожидания по зарплате?", ("рыноч", "вилка", "обсуждаем", "kzt", "usd", "руб"), ("любая",)),
-    InterviewQuestion("Готовы ли вы к командировкам или смене графика?", ("готов", "возможно", "обсуждаем"), ("не готов",)),
-    InterviewQuestion("Предпочитаете удалённую работу или офис?", ("удален", "офис", "гибрид"), ("без разницы",)),
+    InterviewQuestion("У вас есть коммерческий опыт в Python, Java или JavaScript?"),
+    InterviewQuestion("Вы уверенно работаете в команде и умеете договариваться с коллегами?"),
+    InterviewQuestion("Вы умеете работать в условиях многозадачности и соблюдать дедлайны?"),
+    InterviewQuestion("Вы спокойно справляетесь со стрессовыми ситуациями на работе?"),
+    InterviewQuestion("Вы конструктивно решаете конфликты без эскалации?"),
+    InterviewQuestion("Вы регулярно учитесь и развиваете профессиональные навыки?"),
+    InterviewQuestion("За последний год вы проходили курсы или обучение по профессии?"),
+    InterviewQuestion("Вам интересен именно наш продукт и вы хотите развиваться в компании?"),
+    InterviewQuestion("Вы готовы к командировкам или изменениям графика при необходимости?"),
+    InterviewQuestion("Ваши зарплатные ожидания соответствуют рыночной вилке вакансии?"),
 )
 
 
@@ -84,13 +65,14 @@ class VacancyResponder:
     def __init__(self, vacancy_info: VacancyInfo | None = None):
         self.vacancy_info = vacancy_info
         self.sessions: dict[str, CandidateSession] = {}
+        self.completed_candidates: set[str] = set()
 
     def update(self, vacancy_info: VacancyInfo | None) -> None:
         self.vacancy_info = vacancy_info
 
     def answer(self, sender: str, text: str) -> str:
-        if not text.strip():
-            return "Напишите ваш вопрос по вакансии разработчика, и я отвечу."
+        if sender not in self.sessions and sender not in self.completed_candidates:
+            return self._start_interview(sender)
 
         if self._should_start_interview(text):
             return self._start_interview(sender)
@@ -126,14 +108,22 @@ class VacancyResponder:
         self.sessions[sender] = CandidateSession(started=True)
         first_question = INTERVIEW_QUESTIONS[0].text
         return (
-            "Запускаю интервью. Ответьте на вопросы по очереди.\n"
+            "Запускаю интервью из 10 вопросов. Отвечайте только: да или нет.\n"
             f"Вопрос 1/{len(INTERVIEW_QUESTIONS)}: {first_question}"
         )
 
     def _handle_interview_answer(self, sender: str, text: str, session: CandidateSession) -> str:
+        parsed_answer = self._parse_yes_no(text)
+        if parsed_answer is None:
+            current_question = INTERVIEW_QUESTIONS[session.question_index].text
+            return (
+                "Пожалуйста, ответьте только 'да' или 'нет'.\n"
+                f"Вопрос {session.question_index + 1}/{len(INTERVIEW_QUESTIONS)}: {current_question}"
+            )
+
         question = INTERVIEW_QUESTIONS[session.question_index]
-        session.answers.append(text.strip())
-        session.score += self._score_answer(text, question)
+        session.answers.append("да" if parsed_answer else "нет")
+        session.score += self._score_answer(parsed_answer, question)
         session.question_index += 1
 
         if session.question_index >= len(INTERVIEW_QUESTIONS):
@@ -142,32 +132,32 @@ class VacancyResponder:
         next_question = INTERVIEW_QUESTIONS[session.question_index].text
         return f"Вопрос {session.question_index + 1}/{len(INTERVIEW_QUESTIONS)}: {next_question}"
 
-    def _score_answer(self, text: str, question: InterviewQuestion) -> int:
-        normalized = text.lower().strip()
-        score = 0
-        if len(normalized) >= question.min_answer_len:
-            score += 1
-        score += self._keyword_hits(normalized, question.positive_keywords)
-        score -= self._keyword_hits(normalized, question.negative_keywords)
-        return score
+    def _score_answer(self, answer_yes: bool, question: InterviewQuestion) -> int:
+        return 1 if answer_yes == question.expected_yes else 0
 
-    def _keyword_hits(self, text: str, keywords: Iterable[str]) -> int:
-        return sum(1 for keyword in keywords if keyword in text)
+    def _parse_yes_no(self, text: str) -> bool | None:
+        normalized = text.lower().strip()
+        if normalized in {"да", "yes", "y", "+"}:
+            return True
+        if normalized in {"нет", "no", "n", "-"}:
+            return False
+        return None
 
     def _finish_interview(self, sender: str, session: CandidateSession) -> str:
-        max_score = len(INTERVIEW_QUESTIONS) * 3
-        threshold = max(20, int(max_score * 0.35))
+        max_score = len(INTERVIEW_QUESTIONS)
+        threshold = 7
         is_fit = session.score >= threshold
 
         verdict = "Подходит" if is_fit else "Пока не подходит"
         explanation = (
-            "Ответы содержат релевантный опыт, мотивацию и готовность к развитию."
+            "Кандидат дал достаточно положительных ответов по ключевым критериям."
             if is_fit
-            else "В ответах мало конкретики по опыту, мотивации или рабочим условиям."
+            else "Недостаточно положительных ответов по ключевым критериям."
         )
         summary = f"Итог интервью: {verdict}. Балл: {session.score}/{max_score}. {explanation}"
 
         del self.sessions[sender]
+        self.completed_candidates.add(sender)
         return summary
 
     def _salary_answer(self) -> str:
