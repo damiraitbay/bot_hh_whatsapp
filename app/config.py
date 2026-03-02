@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     twilio_whatsapp_number: str = ""
 
     hh_vacancy_id: str = ""
-    hh_api_base_url: str = "https://api.hh.ru"
+    hh_api_base_url: str = "https://api.hh.kz"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

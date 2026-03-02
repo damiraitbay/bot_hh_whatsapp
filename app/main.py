@@ -67,7 +67,7 @@ async def twilio_whatsapp_webhook(
     body = form_data.get("Body", "")
     sender = form_data.get("From", "")
 
-    answer = responder.answer(body)
+    answer = responder.answer(sender, body)
 
     response = MessagingResponse()
     response.message(answer)
