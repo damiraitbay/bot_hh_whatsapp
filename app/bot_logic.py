@@ -22,7 +22,7 @@ class VacancyInfo:
 @dataclass
 class InterviewQuestion:
     text: str
-    expected_yes: bool = True
+    options: tuple[tuple[str, int], ...]
 
 
 @dataclass
@@ -48,16 +48,47 @@ INTERVIEW_START_KEYWORDS = (
 )
 
 INTERVIEW_QUESTIONS: tuple[InterviewQuestion, ...] = (
-    InterviewQuestion("У вас есть коммерческий опыт в Python, Java или JavaScript?"),
-    InterviewQuestion("Вы уверенно работаете в команде и умеете договариваться с коллегами?"),
-    InterviewQuestion("Вы умеете работать в условиях многозадачности и соблюдать дедлайны?"),
-    InterviewQuestion("Вы спокойно справляетесь со стрессовыми ситуациями на работе?"),
-    InterviewQuestion("Вы конструктивно решаете конфликты без эскалации?"),
-    InterviewQuestion("Вы регулярно учитесь и развиваете профессиональные навыки?"),
-    InterviewQuestion("За последний год вы проходили курсы или обучение по профессии?"),
-    InterviewQuestion("Вам интересен именно наш продукт и вы хотите развиваться в компании?"),
-    InterviewQuestion("Вы готовы к командировкам или изменениям графика при необходимости?"),
-    InterviewQuestion("Ваши зарплатные ожидания соответствуют рыночной вилке вакансии?"),
+    InterviewQuestion(
+        text="Работаете ли вы в настоящее время?",
+        options=(
+            ("ДА, я работаю и ищу подработку", 0),
+            ("НЕТ, я мама", 10),
+            ("НЕТ, я в поиске работы", 5),
+            ("НЕТ, я студент / школьник", 5),
+        ),
+    ),
+    InterviewQuestion(
+        text="Работаете ли вы более 8 часов в день и более 5 дней в неделю?",
+        options=(("ДА", 0), ("НЕТ", 5)),
+    ),
+    InterviewQuestion(
+        text="Вы работаете менее 40 часов или более 40 часов в неделю?",
+        options=(("Менее 40 часов", 5), ("Более 40 часов", 0)),
+    ),
+    InterviewQuestion(
+        text="Сколько часов в неделю вы реально можете работать (с учётом вечернего и ночного времени)?",
+        options=(
+            ("2 часа", 5),
+            ("4 часа", 10),
+            ("8 часов", 5),
+            ("10 часов", 5),
+        ),
+    ),
+    InterviewQuestion(
+        text="Как вы оцениваете свои навыки работы с компьютером? Оценка от 1 до 10 (где 10 — очень высокий уровень).",
+        options=(
+            ("10", 3),
+            ("9", 3),
+            ("8", 3),
+            ("7", 3),
+            ("6", 3),
+            ("5", -50),
+            ("4", -50),
+            ("3", -50),
+            ("2", -50),
+            ("1", -50),
+        ),
+    ),
 )
 
 
@@ -106,55 +137,72 @@ class VacancyResponder:
 
     def _start_interview(self, sender: str) -> str:
         self.sessions[sender] = CandidateSession(started=True)
-        first_question = INTERVIEW_QUESTIONS[0].text
+        first_question = self._format_question(0)
         return (
-            "Запускаю интервью из 10 вопросов. Отвечайте только: да или нет.\n"
-            f"Вопрос 1/{len(INTERVIEW_QUESTIONS)}: {first_question}"
+            "Здравствуйте,\n\n"
+            "Благодарим вас за отклик на вакансию с возможностью работы из дома (Homeoffice).\n\n"
+            "Просим вас с пониманием отнестись к тому, что в рамках короткого этапа отбора "
+            "мы хотели бы задать несколько вопросов. Цель — заранее определить, сможете ли вы "
+            "работать необходимое количество часов в формате Homeoffice.\n\n"
+            "Пожалуйста, отвечайте номером варианта (например: 1, 2, 3...) "
+            "или текстом выбранного варианта.\n\n"
+            f"{first_question}"
         )
 
     def _handle_interview_answer(self, sender: str, text: str, session: CandidateSession) -> str:
-        parsed_answer = self._parse_yes_no(text)
-        if parsed_answer is None:
-            current_question = INTERVIEW_QUESTIONS[session.question_index].text
+        parsed_score = self._parse_answer(session.question_index, text)
+        if parsed_score is None:
+            current_question = self._format_question(session.question_index)
             return (
-                "Пожалуйста, ответьте только 'да' или 'нет'.\n"
-                f"Вопрос {session.question_index + 1}/{len(INTERVIEW_QUESTIONS)}: {current_question}"
+                "Не удалось распознать ответ. Пожалуйста, укажите номер варианта или точный текст варианта.\n\n"
+                f"{current_question}"
             )
 
-        question = INTERVIEW_QUESTIONS[session.question_index]
-        session.answers.append("да" if parsed_answer else "нет")
-        session.score += self._score_answer(parsed_answer, question)
+        session.answers.append(text.strip())
+        session.score += parsed_score
         session.question_index += 1
 
         if session.question_index >= len(INTERVIEW_QUESTIONS):
             return self._finish_interview(sender, session)
 
-        next_question = INTERVIEW_QUESTIONS[session.question_index].text
-        return f"Вопрос {session.question_index + 1}/{len(INTERVIEW_QUESTIONS)}: {next_question}"
+        return self._format_question(session.question_index)
 
-    def _score_answer(self, answer_yes: bool, question: InterviewQuestion) -> int:
-        return 1 if answer_yes == question.expected_yes else 0
+    def _format_question(self, index: int) -> str:
+        question = INTERVIEW_QUESTIONS[index]
+        lines = [f"Вопрос {index + 1}/{len(INTERVIEW_QUESTIONS)}:", question.text, ""]
+        lines.extend(f"{option_index}. {label}" for option_index, (label, _) in enumerate(question.options, start=1))
+        return "\n".join(lines)
 
-    def _parse_yes_no(self, text: str) -> bool | None:
-        normalized = text.lower().strip()
-        if normalized in {"да", "yes", "y", "+"}:
-            return True
-        if normalized in {"нет", "no", "n", "-"}:
-            return False
+    def _parse_answer(self, question_index: int, text: str) -> int | None:
+        question = INTERVIEW_QUESTIONS[question_index]
+        normalized = re.sub(r"\s+", " ", text.lower().strip())
+
+        if normalized.isdigit():
+            option_number = int(normalized)
+            if 1 <= option_number <= len(question.options):
+                return question.options[option_number - 1][1]
+
+        for label, score in question.options:
+            normalized_label = re.sub(r"\s+", " ", label.lower().strip())
+            if normalized == normalized_label:
+                return score
+
         return None
 
     def _finish_interview(self, sender: str, session: CandidateSession) -> str:
-        max_score = len(INTERVIEW_QUESTIONS)
-        threshold = 7
-        is_fit = session.score >= threshold
-
-        verdict = "Подходит" if is_fit else "Пока не подходит"
-        explanation = (
-            "Кандидат дал достаточно положительных ответов по ключевым критериям."
-            if is_fit
-            else "Недостаточно положительных ответов по ключевым критериям."
-        )
-        summary = f"Итог интервью: {verdict}. Балл: {session.score}/{max_score}. {explanation}"
+        if session.score < 10:
+            summary = (
+                "Результат: менее 10 баллов.\n"
+                "К сожалению, вы не подходите под требования, так как, вероятно, "
+                "не сможете обеспечить минимум 60 рабочих часов в месяц."
+            )
+        else:
+            summary = (
+                "Результат: более 10 баллов.\n"
+                "Мы будем рады пригласить вас на собеседование.\n"
+                "Пожалуйста, свяжитесь напрямую с Александром Хаасом через WhatsApp для назначения встречи.\n\n"
+                "Телефон: +7 707 358 55 74"
+            )
 
         del self.sessions[sender]
         self.completed_candidates.add(sender)
